@@ -3,11 +3,18 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 )
+
+// Target is a struct to hold the original target requested by a user
+type Target struct {
+	Referer string
+}
 
 // cookie handling
 
@@ -53,6 +60,7 @@ func clearSession(response http.ResponseWriter) {
 func authenticate(name string, pass string) (isAuthenticated bool) {
 	isAuthenticated = false
 
+	// TODO:  Move url to a properties file
 	url := "http://openam.example.com:8080/openam/json/realms/root/authenticate"
 	fmt.Println("URL:>", url)
 
@@ -82,17 +90,46 @@ func authenticate(name string, pass string) (isAuthenticated bool) {
 // login handler
 
 func loginHandler(response http.ResponseWriter, request *http.Request) {
+
+	redirectTarget := "/"
+
 	name := request.FormValue("name")
 	pass := request.FormValue("password")
-	redirectTarget := "/"
+
+	fmt.Println("LoginHandler - Request: ", request)
+	fmt.Println("LoginHandler - Referer: ", request.Header.Get("Referer"))
+
+	a := request.Header.Get("Referer")
+
+	b, err := url.ParseQuery(a)
+
+	if err != nil {
+		fmt.Println("oh shit: ", b)
+	} else {
+		for key, value := range b {
+			fmt.Println(key)
+			redirectTarget = value[0]
+			fmt.Println("New Redirect Target: ", redirectTarget)
+		}
+	}
+
+	request.ParseForm()
+
+	// parse request and get referer
+
+	// redirect to the target extracted from referer with the AM session cookie
+
+	// if name and password fields aren't null ...
+
 	if name != "" && pass != "" {
 		// .. check credentials ..
 		isAuthenticated := authenticate(name, pass)
 
 		if isAuthenticated {
-			fmt.Printf("User is Authenticated")
 			setSession(name, response)
-			redirectTarget = "/internal"
+			//redirectTarget = "/internal"
+		} else {
+			redirectTarget = "/"
 		}
 	}
 	http.Redirect(response, request, redirectTarget, 302)
@@ -119,7 +156,15 @@ const indexPage = `
 `
 
 func indexPageHandler(response http.ResponseWriter, request *http.Request) {
+
+	if err := request.ParseForm(); err != nil {
+		fmt.Printf("Here is the Request: ", request)
+		log.Printf("Error parsing form: %s", err)
+		return
+	}
+
 	fmt.Fprintf(response, indexPage)
+
 }
 
 const internalPage = `
